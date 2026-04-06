@@ -1,0 +1,25 @@
+envSet("DEFAULT_USER", "tester");
+envSet("DEFAULT_PASSWORD", "123456");
+envSet("PATH", concat(concat("/user/", envGet("DEFAULT_USER")), "/apps:/apps/system:/bin:/boot"));
+
+if exists("/user/tester/password.txt") == false {
+	writeFile("/user/tester/password.txt", "123456");
+	writeFile("/user/tester/profile.txt", "Mentux test user");
+	writeFile("/user/tester/welcome.txt", "Welcome to your Mentux home directory.");
+}
+
+if exists("/user/tester/apps/readme.txt") == false {
+	writeFile("/user/tester/apps/readme.txt", "Install per-user apps in /user/tester/apps/<appid>/main.mtx");
+}
+
+if exists("/user/tester/desktop/terminal.sym") == false {
+	writeFile("/user/tester/desktop/terminal.sym", "terminal|Terminal|0.06|0.24");
+}
+
+if exists("/user/tester/desktop/files.sym") == false {
+	writeFile("/user/tester/desktop/files.sym", "files|Files|0.18|0.24");
+}
+
+let appArgs = listNew();
+exec("gui", appArgs);
+exit(0);

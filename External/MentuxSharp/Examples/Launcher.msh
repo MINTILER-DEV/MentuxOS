@@ -1,0 +1,16 @@
+namespace Apps.Tools.Launcher;
+
+using System;
+using Libraries.Json;
+
+embed mtx LegacyShell from "../Programs/mci.mentux";
+
+class Launcher {
+    static int Main(string[] args) {
+        var manifest = Json.parse("{\"title\":\"Launcher\",\"taskbar\":true}");
+        if (args.length > 0) {
+            return LegacyShell.exec(args);
+        }
+        return 0;
+    }
+}

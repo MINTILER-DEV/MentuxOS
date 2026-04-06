@@ -1,0 +1,11 @@
+namespace Libraries.Json;
+
+class JsonLibrary {
+    export static object parse(string source) {
+        return Runtime.Json.parse(source);
+    }
+
+    export static string stringify(object value) {
+        return Runtime.Json.stringify(value);
+    }
+}

@@ -1,0 +1,44 @@
+namespace Apps.Productivity.Notepad;
+
+using System;
+using System.IO;
+using mxl Motion = "/lib/ui/motion.mxl";
+
+class NotepadApp {
+    private string currentPath;
+    private string buffer;
+    public bool Dirty { get; private set; }
+
+    constructor(string path) {
+        this.currentPath = path;
+        this.buffer = "";
+        this.Dirty = false;
+    }
+
+    public void Open() {
+        try {
+            this.buffer = File.read(this.currentPath);
+            this.Dirty = false;
+        }
+        catch (FileNotFoundException ex) {
+            this.buffer = "";
+            this.Dirty = false;
+        }
+    }
+
+    public void Save() {
+        File.write(this.currentPath, this.buffer);
+        this.Dirty = false;
+    }
+
+    public void SetText(string text) {
+        this.buffer = text;
+        this.Dirty = true;
+    }
+
+    public int Run() {
+        Motion.play("notepad_window", "files_window_intro");
+        this.Open();
+        return 0;
+    }
+}

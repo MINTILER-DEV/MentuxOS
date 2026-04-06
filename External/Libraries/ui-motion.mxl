@@ -1,0 +1,41 @@
+name: ui-motion
+version: 1
+kind: library
+summary: Common handcrafted motion presets for Mentux guest applications.
+
+exports:
+- login_shell_intro
+  property: position
+  from: [0.5, 0.56]
+  to: [0.5, 0.5]
+  easing: outCubic
+  duration: 0.24
+  steps: 14
+- desktop_taskbar_intro
+  property: position
+  from: [0.22, 0.92]
+  to: [0.22, 0.84]
+  easing: outQuad
+  duration: 0.20
+  steps: 12
+- desktop_canvas_intro
+  property: position
+  from: [0.04, 0.30]
+  to: [0.04, 0.24]
+  easing: outQuad
+  duration: 0.18
+  steps: 10
+- terminal_window_intro
+  property: position
+  from: [0.1, 0.16]
+  to: [0.1, 0.1]
+  easing: outQuad
+  duration: 0.18
+  steps: 10
+- files_window_intro
+  property: position
+  from: [0.5, 0.56]
+  to: [0.5, 0.5]
+  easing: outCubic
+  duration: 0.20
+  steps: 12

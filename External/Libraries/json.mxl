@@ -1,0 +1,12 @@
+name: core-json
+version: 1
+kind: library
+summary: Compiled Mentux JSON helpers exposed through mxl exports.
+
+exports:
+- parse
+  kind: code
+  summary: Parse JSON text into Mentux values.
+- stringify
+  kind: code
+  summary: Encode Mentux values into JSON text.

@@ -1,0 +1,36 @@
+namespace Demos.Exceptions;
+
+using System;
+using System.Gui;
+using System.String;
+
+class ExceptionDemo {
+    static int Main(string[] args) {
+        let output = "start";
+
+        try {
+            File.read("/missing/demo.txt");
+            output = String.concat(output, "|unexpected");
+        }
+        catch (FileNotFoundException ex) {
+            output = String.concat(output, "|missing");
+        }
+        finally {
+            output = String.concat(output, "|cleanup");
+        }
+
+        try {
+            throw "boom";
+            output = String.concat(output, "|after-throw");
+        }
+        catch (Exception ex) {
+            output = String.concat(output, "|throw");
+        }
+        finally {
+            output = String.concat(output, "|done");
+        }
+
+        print(output);
+        return 0;
+    }
+}

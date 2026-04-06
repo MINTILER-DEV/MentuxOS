@@ -1,0 +1,14 @@
+let counter = 3;
+print "MentuxScript demo starting";
+
+while counter > 0 {
+	print counter;
+	counter = counter - 1;
+}
+
+if counter == 0 {
+	print "Launching /bin/hello.mtx";
+	run "/bin/hello.mtx", "spawned-by-compiler";
+}
+
+exit 0;

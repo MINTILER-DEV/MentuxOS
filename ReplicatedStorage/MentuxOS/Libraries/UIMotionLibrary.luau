@@ -1,0 +1,62 @@
+local LibraryFormat = require(script.Parent.Parent:WaitForChild("LibraryFormat"))
+
+return LibraryFormat.new({
+	name = "ui-motion",
+	exports = {
+		login_shell_intro = {
+			property = "position",
+			fromX = 0.5,
+			fromY = 0.56,
+			toX = 0.5,
+			toY = 0.5,
+			duration = 0.24,
+			steps = 14,
+			easing = "outCubic",
+		},
+		desktop_taskbar_intro = {
+			property = "position",
+			fromX = 0.22,
+			fromY = 0.92,
+			toX = 0.22,
+			toY = 0.84,
+			duration = 0.2,
+			steps = 12,
+			easing = "outQuad",
+		},
+		desktop_canvas_intro = {
+			property = "position",
+			fromX = 0.04,
+			fromY = 0.3,
+			toX = 0.04,
+			toY = 0.24,
+			duration = 0.18,
+			steps = 10,
+			easing = "outQuad",
+		},
+		terminal_window_intro = {
+			property = "position",
+			fromX = 0.1,
+			fromY = 0.16,
+			toX = 0.1,
+			toY = 0.1,
+			duration = 0.18,
+			steps = 10,
+			easing = "outQuad",
+		},
+		files_window_intro = {
+			property = "position",
+			fromX = 0.5,
+			fromY = 0.56,
+			toX = 0.5,
+			toY = 0.5,
+			duration = 0.2,
+			steps = 12,
+			easing = "outCubic",
+		},
+	},
+	metadata = {
+		author = "MentuxOS",
+		category = "ui",
+		summary = "Common handcrafted motion presets for Mentux guest applications.",
+	},
+})

@@ -1,0 +1,72 @@
+let currentPath = "";
+let currentText = "";
+let statusText = "Create or edit a text file.";
+let running = true;
+let hasAnimated = false;
+
+if argc() > 0 {
+	currentPath = resolvePath(argv(1));
+	if statKind(currentPath) == "file" {
+		currentText = readFile(currentPath);
+		statusText = concat("Loaded ", currentPath);
+	} else {
+		currentText = "";
+		statusText = concat("New file ", currentPath);
+	}
+} else {
+	currentPath = concat(envGet("HOME"), "/untitled.txt");
+	statusText = concat("New file ", currentPath);
+}
+
+while running == true {
+	guiReset();
+	guiBackground("desktop");
+
+	guiWindow("notepad_window", "Notepad", 0.5, 0.5, 0.82, 0.84);
+	guiAnchor("notepad_window", 0.5, 0.5);
+	guiLabel("notepad_title", "notepad_window", "Notepad", 0.04, 0.1, 0.28, 0.07);
+	guiLabel("notepad_path", "notepad_window", currentPath, 0.04, 0.16, 0.62, 0.06);
+	guiLabel("notepad_status", "notepad_window", statusText, 0.68, 0.16, 0.26, 0.06);
+
+	guiPanel("notepad_toolbar", "notepad_window", 0.04, 0.24, 0.92, 0.1, "panelMuted");
+	guiPadding("notepad_toolbar", 0.02, 0.15, 0.02, 0.15);
+	guiListLayout("notepad_toolbar", "horizontal", 0.015, "left", "center");
+	guiButton("notepad_save", "notepad_toolbar", "Save", 0, 0, 0.16, 0.7);
+	guiButton("notepad_reload", "notepad_toolbar", "Reload", 0, 0, 0.16, 0.7);
+	guiButton("notepad_close", "notepad_toolbar", "Close", 0, 0, 0.16, 0.7);
+
+	guiTextBox("notepad_body", "notepad_window", "text", currentText, 0.04, 0.37, 0.92, 0.54, false, true);
+
+	if hasAnimated == false {
+		guiTweenPreset("notepad_window", "/lib/ui/motion.mxl", "files_window_intro");
+		hasAnimated = true;
+	}
+
+	let event = guiWait();
+	let eventType = get(event, 1);
+	let eventId = get(event, 2);
+
+	if eventType == "click" {
+		if eventId == "notepad_close" {
+			running = false;
+		} else {
+			if eventId == "notepad_reload" {
+				if statKind(currentPath) == "file" {
+					currentText = readFile(currentPath);
+					statusText = concat("Reloaded ", currentPath);
+				} else {
+					currentText = "";
+					statusText = concat("Missing file ", currentPath);
+				}
+			} else {
+				if eventId == "notepad_save" {
+					currentText = guiGetText("notepad_body");
+					writeFile(currentPath, currentText);
+					statusText = concat("Saved ", currentPath);
+				}
+			}
+		}
+	}
+}
+
+exit(0);

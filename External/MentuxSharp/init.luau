@@ -1,0 +1,15 @@
+return {
+	GrammarSpec = require(script:WaitForChild("GrammarSpec")),
+	AstSpec = require(script:WaitForChild("AstSpec")),
+	IR = require(script:WaitForChild("IR")),
+	LoweringPlan = require(script:WaitForChild("LoweringPlan")),
+	Tokenizer = require(script:WaitForChild("Tokenizer")),
+	Parser = require(script:WaitForChild("Parser")),
+	FrontEnd = require(script:WaitForChild("FrontEnd")),
+	SourceLoader = require(script:WaitForChild("SourceLoader")),
+	Lowerer = require(script:WaitForChild("Lowerer")),
+	CodeGen = require(script:WaitForChild("CodeGen")),
+	ImageEmitter = require(script:WaitForChild("ImageEmitter")),
+	Compiler = require(script:WaitForChild("Compiler")),
+	ExampleRenderer = require(script:WaitForChild("ExampleRenderer")),
+}

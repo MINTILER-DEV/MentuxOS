@@ -1,0 +1,27 @@
+let outputId = envGet("TERM_OUTPUT");
+
+if argc() == 0 {
+	guiAppend(outputId, "usage: cat <path> [path...]");
+	exit(1);
+}
+
+let index = 1;
+while index <= argc() {
+	let rawPath = argv(index);
+	let path = resolvePath(rawPath);
+	let kind = statKind(path);
+
+	if kind == "file" {
+		guiAppend(outputId, fileInfo(path));
+	} else {
+		if kind == "dir" {
+			guiAppend(outputId, concat(path, " is a directory"));
+		} else {
+			guiAppend(outputId, concat(path, " not found"));
+		}
+	}
+
+	index = index + 1;
+}
+
+exit(0);
