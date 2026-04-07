@@ -37,15 +37,20 @@ if exists("/user/tester/desktop/files.sym") == false {
 	writeFile("/user/tester/desktop/files.sym", "files|Files|0.18|0.24");
 }
 
+if exists("/user/tester/desktop/browser.sym") == false {
+	writeFile("/user/tester/desktop/browser.sym", "browser|Browser|0.30|0.24");
+}
+
 if exists("/user/tester/desktop/code.sym") == false {
-	writeFile("/user/tester/desktop/code.sym", "code|Code|0.30|0.24");
+	writeFile("/user/tester/desktop/code.sym", "code|Code|0.42|0.24");
 }
 
 if exists("/user/tester/desktop/settings.sym") == false {
-	writeFile("/user/tester/desktop/settings.sym", "settings|Settings|0.42|0.24");
+	writeFile("/user/tester/desktop/settings.sym", "settings|Settings|0.54|0.24");
 }
 
 let appArgs = listNew();
+exec("mtxdthost", appArgs);
 exec("gui", appArgs);
 exit(0);
 ]]

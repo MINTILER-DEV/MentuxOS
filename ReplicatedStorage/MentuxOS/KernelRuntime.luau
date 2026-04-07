@@ -48,6 +48,15 @@ function KernelRuntime:_requireHTTPBridge()
 	return bridge
 end
 
+function KernelRuntime:_requireMtxDTBridge()
+	local mentuxRoot = ReplicatedStorage:WaitForChild("MentuxOS")
+	local runtimeFolder = mentuxRoot:WaitForChild("Runtime", 5)
+	assert(runtimeFolder, "Mentux MtxDT runtime folder is unavailable")
+	local bridge = runtimeFolder:WaitForChild("MtxDTBridge", 5)
+	assert(bridge, "Mentux MtxDT bridge remote is unavailable")
+	return bridge
+end
+
 function KernelRuntime:_normalizeArgv(argv, preserveRefs)
 	if argv == nil then
 		return {}
@@ -474,6 +483,88 @@ function KernelRuntime:_normalizeHeaderTokens(value)
 		table.insert(headers, tostring(entry))
 	end
 	return headers
+end
+
+function KernelRuntime:_normalizeMtxDTResponse(value)
+	if type(value) ~= "table" then
+		return {
+			status = 200,
+			page = {
+				title = "Response",
+				blocks = {
+					{ kind = "text", text = tostring(value) },
+				},
+			},
+		}
+	end
+
+	if value.page ~= nil or value.status ~= nil then
+		return Util.deepCopy(value)
+	end
+
+	if value.blocks ~= nil or value.title ~= nil then
+		return {
+			status = 200,
+			page = Util.deepCopy(value),
+		}
+	end
+
+	return {
+		status = 200,
+		page = {
+			title = "Response",
+			blocks = {
+				{ kind = "text", text = Util.stringify(value) },
+			},
+		},
+	}
+end
+
+function KernelRuntime:_runMtxDTRoute(process, bridgeResult)
+	local handlerPath = tostring(bridgeResult.handlerPath or "")
+	local handlerExport = tostring(bridgeResult.handlerExport or "")
+	assert(handlerPath ~= "", "Dynamic MtxDT route is missing handlerPath")
+
+	local requestValue = Util.deepCopy(bridgeResult.request or {})
+
+	if handlerPath:match("%.mxl$") then
+		local libraryPath = self:_resolvePath(process, handlerPath)
+		local library = self.vfs:readFile(libraryPath)
+		LibraryFormat.validate(library)
+		local exportValue = library.exports[handlerExport]
+		assert(exportValue ~= nil, "Unknown MtxDT route export " .. handlerExport)
+		assert(type(exportValue) == "table" and exportValue.magic == ExecutableFormat.MAGIC, "MtxDT route export is not executable")
+
+		local result = self:runImage(exportValue, {
+			path = string.format("%s::%s", libraryPath, handlerExport),
+			argv = { requestValue },
+			parentPid = process.pid,
+			env = self:_normalizeEnv(process.env),
+			maxCycles = process.maxCycles,
+			preserveArgvRefs = true,
+			guiScopePrefix = process.guiScopePrefix,
+		})
+		if result.ok == false then
+			error(string.format("MtxDT route %s failed: %s", handlerExport, tostring(result.error)))
+		end
+		return self:_normalizeMtxDTResponse(result.returnValue or result.exitCode)
+	end
+
+	local executablePath = self:_resolvePath(process, handlerPath)
+	local image = self.vfs:readFile(executablePath)
+	local result = self:runImage(image, {
+		path = executablePath,
+		argv = { requestValue },
+		parentPid = process.pid,
+		env = self:_normalizeEnv(process.env),
+		maxCycles = process.maxCycles,
+		preserveArgvRefs = true,
+		guiScopePrefix = process.guiScopePrefix,
+	})
+	if result.ok == false then
+		error(string.format("MtxDT executable route %s failed: %s", executablePath, tostring(result.error)))
+	end
+	return self:_normalizeMtxDTResponse(result.returnValue or result.exitCode)
 end
 
 function KernelRuntime:_tryParseJSON(source)
@@ -1082,6 +1173,119 @@ function KernelRuntime:_registerCoreSyscalls()
 			tostring(response.url or request.url),
 			tostring(response.headers or ""),
 		}
+	end)
+
+	self.syscalls:register("mtxdt.registerSite", function(runtime, _, args)
+		local bridge = runtime:_requireMtxDTBridge()
+		local response = bridge:InvokeServer({
+			op = "registerSite",
+			site = Util.deepCopy(args[1]),
+		})
+		if response.ok ~= true then
+			error(tostring(response.error or "MtxDT site registration failed"))
+		end
+		return Util.deepCopy(response)
+	end)
+
+	self.syscalls:register("mtxdt.resolve", function(runtime, _, args)
+		local bridge = runtime:_requireMtxDTBridge()
+		local response = bridge:InvokeServer({
+			op = "resolveHost",
+			host = tostring(args[1] or ""),
+			port = tonumber(args[2]) or 80,
+		})
+		if response.ok ~= true then
+			return false
+		end
+		return Util.deepCopy(response)
+	end)
+
+	self.syscalls:register("mtxdt.request", function(runtime, process, args)
+		local bridge = runtime:_requireMtxDTBridge()
+		local response = bridge:InvokeServer({
+			op = "request",
+			session = tostring(process.env.USER or "guest"),
+			url = tostring(args[1] or ""),
+			method = tostring(args[2] or "GET"),
+			headers = Util.deepCopy(args[3]),
+			body = Util.deepCopy(args[4]),
+		})
+		if type(response) ~= "table" then
+			error("Invalid MtxDT bridge response")
+		end
+		local normalized = nil
+		if response.kind == "dynamic" then
+			normalized = runtime:_runMtxDTRoute(process, response)
+		elseif response.response ~= nil then
+			normalized = runtime:_normalizeMtxDTResponse(response.response)
+		else
+			normalized = runtime:_normalizeMtxDTResponse(response)
+		end
+		normalized.host = tostring((response.request and response.request.host) or response.host or "")
+		normalized.path = tostring((response.request and response.request.path) or "")
+		normalized.url = tostring((response.request and response.request.url) or args[1] or "")
+		normalized.status = tonumber(normalized.status) or tonumber(response.status) or 200
+		return normalized
+	end)
+
+	self.syscalls:register("mtxdt.store.get", function(runtime, process, args)
+		local bridge = runtime:_requireMtxDTBridge()
+		local response = bridge:InvokeServer({
+			op = "storeGet",
+			session = tostring(process.env.USER or "guest"),
+			scope = tostring(args[1] or "global"),
+			key = tostring(args[2] or ""),
+		})
+		if response.ok ~= true then
+			return false
+		end
+		return Util.deepCopy(response.value)
+	end)
+
+	self.syscalls:register("mtxdt.store.set", function(runtime, process, args)
+		local bridge = runtime:_requireMtxDTBridge()
+		local response = bridge:InvokeServer({
+			op = "storeSet",
+			session = tostring(process.env.USER or "guest"),
+			scope = tostring(args[1] or "global"),
+			key = tostring(args[2] or ""),
+			value = Util.deepCopy(args[3]),
+		})
+		return response.ok == true
+	end)
+
+	self.syscalls:register("mtxdt.socket.subscribe", function(runtime, process, args)
+		local bridge = runtime:_requireMtxDTBridge()
+		local response = bridge:InvokeServer({
+			op = "socketSubscribe",
+			session = tostring(process.env.USER or "guest"),
+			channel = tostring(args[1] or ""),
+		})
+		return response.ok == true
+	end)
+
+	self.syscalls:register("mtxdt.socket.publish", function(runtime, process, args)
+		local bridge = runtime:_requireMtxDTBridge()
+		local response = bridge:InvokeServer({
+			op = "socketPublish",
+			session = tostring(process.env.USER or "guest"),
+			channel = tostring(args[1] or ""),
+			message = Util.deepCopy(args[2]),
+			sender = tostring(process.env.USER or "guest"),
+		})
+		return response.ok == true
+	end)
+
+	self.syscalls:register("mtxdt.socket.poll", function(runtime, process)
+		local bridge = runtime:_requireMtxDTBridge()
+		local response = bridge:InvokeServer({
+			op = "socketPoll",
+			session = tostring(process.env.USER or "guest"),
+		})
+		if response.ok ~= true then
+			return false
+		end
+		return Util.deepCopy(response.message)
 	end)
 
 	self.syscalls:register("writeFile", function(runtime, process, args)

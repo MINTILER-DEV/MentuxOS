@@ -1,6 +1,7 @@
 local Assembler = require(script.Parent.Compiler:WaitForChild("Assembler"))
 local MentuxSharp = require(script.Parent.Compiler:WaitForChild("MentuxSharp"))
 local MentuxScriptCompiler = require(script.Parent.Compiler:WaitForChild("MentuxScriptCompiler"))
+local BrowserScript = require(script.Parent.Programs:WaitForChild("BrowserScript"))
 local CatScript = require(script.Parent.Programs:WaitForChild("CatScript"))
 local CodeLauncherScript = require(script.Parent.Programs:WaitForChild("CodeLauncherScript"))
 local CurlScript = require(script.Parent.Programs:WaitForChild("CurlScript"))
@@ -11,6 +12,8 @@ local InitScript = require(script.Parent.Programs:WaitForChild("InitScript"))
 local JSONLibrary = require(script.Parent.Libraries:WaitForChild("JSONLibrary"))
 local GUILibrary = require(script.Parent.Libraries:WaitForChild("GUILibrary"))
 local KernelSource = require(script.Parent.Programs:WaitForChild("KernelSource"))
+local MtxDTLibrary = require(script.Parent.Libraries:WaitForChild("MtxDTLibrary"))
+local MtxDTHostScript = require(script.Parent.Programs:WaitForChild("MtxDTHostScript"))
 local MTSumScript = require(script.Parent.Programs:WaitForChild("MTSumScript"))
 local NotepadScript = require(script.Parent.Programs:WaitForChild("NotepadScript"))
 local PingScript = require(script.Parent.Programs:WaitForChild("PingScript"))
@@ -80,6 +83,18 @@ function ExamplePrograms.buildCatImage()
 	})
 end
 
+function ExamplePrograms.buildBrowserImage()
+	return MentuxScriptCompiler.compile(BrowserScript, {
+		name = "mentux-browser",
+		stackSize = 512,
+		metadata = {
+			displayName = "browser",
+			summary = "MtxDT browser for Mentux-native websites and live channels.",
+			category = "network",
+		},
+	})
+end
+
 function ExamplePrograms.buildCodeLauncherImage()
 	return MentuxScriptCompiler.compile(CodeLauncherScript, {
 		name = "mentux-code-launcher",
@@ -111,6 +126,18 @@ function ExamplePrograms.buildCurlImage()
 		metadata = {
 			displayName = "curl",
 			summary = "HTTP GET client over the Mentux server bridge.",
+			category = "network",
+		},
+	})
+end
+
+function ExamplePrograms.buildMtxDTHostImage()
+	return MentuxScriptCompiler.compile(MtxDTHostScript, {
+		name = "mentux-mtxdt-host",
+		stackSize = 224,
+		metadata = {
+			displayName = "mtxdthost",
+			summary = "Registers the example MtxDT site and DNS records.",
 			category = "network",
 		},
 	})
@@ -224,6 +251,12 @@ function ExamplePrograms.buildCodeLibraryImage()
 	})
 end
 
+function ExamplePrograms.buildMtxDTExampleSiteImage()
+	return MentuxSharpCompiler.compileImage(MTSharpPrograms.MtxDTExampleSite, {
+		name = "WebsiteTuxSite",
+	})
+end
+
 function ExamplePrograms.createSystemDisk()
 	return {
 		kind = "dir",
@@ -268,6 +301,10 @@ function ExamplePrograms.createSystemDisk()
 						kind = "file",
 						content = ExamplePrograms.buildCurlImage(),
 					},
+					["mtxdthost.mtx"] = {
+						kind = "file",
+						content = ExamplePrograms.buildMtxDTHostImage(),
+					},
 					["ping.mtx"] = {
 						kind = "file",
 						content = ExamplePrograms.buildPingImage(),
@@ -282,6 +319,7 @@ function ExamplePrograms.createSystemDisk()
 						children = {
 							terminal = makeAppNode(ExamplePrograms.buildTerminalImage(), "Terminal", true),
 							files = makeAppNode(ExamplePrograms.buildFilesImage(), "Files", true),
+							browser = makeAppNode(ExamplePrograms.buildBrowserImage(), "Browser", true),
 							code = makeAppNode(ExamplePrograms.buildCodeLauncherImage(), "Code", true, {
 								["main.mxl"] = {
 									kind = "file",
@@ -303,6 +341,28 @@ function ExamplePrograms.createSystemDisk()
 									content = MTSharpPrograms.SettingsApp,
 								},
 							}),
+						},
+					},
+				},
+			},
+			www = {
+				kind = "dir",
+				children = {
+					["website.tux"] = {
+						kind = "dir",
+						children = {
+							["site.mxl"] = {
+								kind = "file",
+								content = ExamplePrograms.buildMtxDTExampleSiteImage(),
+							},
+							["site.msh"] = {
+								kind = "file",
+								content = MTSharpPrograms.MtxDTExampleSite,
+							},
+							["site.json"] = {
+								kind = "file",
+								content = '{"host":"website.tux","ip":"10.0.0.5","port":80,"entry":"site.mxl"}',
+							},
 						},
 					},
 				},
@@ -336,9 +396,32 @@ function ExamplePrograms.createSystemDisk()
 							},
 						},
 					},
+					web = {
+						kind = "dir",
+						children = {
+							["mtxdt.mxl"] = {
+								kind = "file",
+								content = MtxDTLibrary,
+							},
+						},
+					},
 					sharp = {
 						kind = "dir",
 						children = {
+							Mentux = {
+								kind = "dir",
+								children = {
+									Web = {
+										kind = "dir",
+										children = {
+											["MtxDT.mxl"] = {
+												kind = "file",
+												content = MtxDTLibrary,
+											},
+										},
+									},
+								},
+							},
 							Libraries = {
 								kind = "dir",
 								children = {
@@ -374,7 +457,7 @@ function ExamplePrograms.createSystemDisk()
 				children = {
 					["motd.txt"] = {
 						kind = "file",
-						content = "Welcome to Mentux OS. This guest kernel is running on a custom VM, not Luau bytecode.",
+						content = "Welcome to Mentux OS. This guest kernel is running on a custom VM, not Luau bytecode.\nTry the Browser app with mtx://website.tux/.",
 					},
 				},
 			},
