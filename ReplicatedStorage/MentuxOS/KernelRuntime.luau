@@ -135,6 +135,9 @@ function KernelRuntime:_currentModulePath(process)
 end
 
 function KernelRuntime:_guiScopePrefix(process)
+	if process and type(process.guiScopePrefix) == "string" and process.guiScopePrefix ~= "" then
+		return process.guiScopePrefix
+	end
 	return string.format("p%d", tonumber(process and process.pid) or 0)
 end
 
@@ -998,6 +1001,7 @@ function KernelRuntime:_registerCoreSyscalls()
 				env = runtime:_normalizeEnv(process.env),
 				maxCycles = process.maxCycles,
 				preserveArgvRefs = true,
+				guiScopePrefix = process.guiScopePrefix,
 			})
 			if result.ok == false then
 				error(string.format("Library export %s failed: %s", exportName, tostring(result.error)))
@@ -1045,6 +1049,7 @@ function KernelRuntime:_registerCoreSyscalls()
 			env = runtime:_normalizeEnv(process.env),
 			maxCycles = process.maxCycles,
 			preserveArgvRefs = true,
+			guiScopePrefix = process.guiScopePrefix,
 		})
 
 		if result.ok == false then
@@ -1195,7 +1200,13 @@ function KernelRuntime:_createProcess(executable, options)
 		pendingException = nil,
 		maxCycles = options.maxCycles or self.defaultMaxCycles,
 		preserveArgvRefs = options.preserveArgvRefs == true,
+		guiScopePrefix = options.guiScopePrefix,
+		ownsGuiScope = options.guiScopePrefix == nil or options.guiScopePrefix == "",
 	}
+
+	if process.guiScopePrefix == nil or process.guiScopePrefix == "" then
+		process.guiScopePrefix = string.format("p%d", pid)
+	end
 
 	if process.env.PWD == nil then
 		process.env.PWD = "/"
@@ -1235,10 +1246,17 @@ function KernelRuntime:_runPreparedProcess(process)
 		return process.cpu:run(process.maxCycles)
 	end)
 
+	local function cleanupProcessScope()
+		if self.guiController and process.ownsGuiScope == true and type(process.guiScopePrefix) == "string" and process.guiScopePrefix ~= "" then
+			self.guiController:resetScope(process.guiScopePrefix)
+		end
+	end
+
 	if not ok then
 		process.exitCode = process.exitCode or 1
 		self:_log(string.format("Process %s crashed: %s", process.path, tostring(resultOrError)))
 		self.processes[process.pid] = nil
+		cleanupProcessScope()
 		return {
 			ok = false,
 			exitCode = process.exitCode,
@@ -1250,6 +1268,7 @@ function KernelRuntime:_runPreparedProcess(process)
 
 	process.exitCode = process.exitCode or 0
 	self.processes[process.pid] = nil
+	cleanupProcessScope()
 	return {
 		ok = true,
 		exitCode = process.exitCode,

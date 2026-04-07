@@ -341,6 +341,8 @@ function GUIController.new(options)
 		lastKeyboardSignature = nil,
 		lastKeyboardAt = 0,
 		lastClickAtById = {},
+		layoutStateById = {},
+		nextTopLevelZIndex = 20,
 		globalConnections = {},
 		fallbackEvents = cloneList(options.fallbackEvents or {
 			{ "click", "login_button", true },
@@ -534,6 +536,139 @@ function GUIController:_resolveParent(parentId)
 	return control.instance
 end
 
+function GUIController:_getStoredLayoutState(id)
+	if id == nil or id == "" then
+		return nil
+	end
+	return self.layoutStateById[id]
+end
+
+function GUIController:_rememberPosition(id, position)
+	if id == nil or id == "" or not position then
+		return
+	end
+
+	local state = self.layoutStateById[id] or {}
+	state.x = tonumber(position.X.Scale) or 0
+	state.y = tonumber(position.Y.Scale) or 0
+	self.layoutStateById[id] = state
+end
+
+function GUIController:_rememberSize(id, size)
+	if id == nil or id == "" or not size then
+		return
+	end
+
+	local state = self.layoutStateById[id] or {}
+	state.width = tonumber(size.X.Scale) or 0
+	state.height = tonumber(size.Y.Scale) or 0
+	self.layoutStateById[id] = state
+end
+
+function GUIController:_rememberZIndex(id, zIndex)
+	if id == nil or id == "" then
+		return
+	end
+
+	local state = self.layoutStateById[id] or {}
+	state.zIndex = tonumber(zIndex) or 1
+	self.layoutStateById[id] = state
+end
+
+function GUIController:_applyStoredLayoutState(id, control)
+	local state = self:_getStoredLayoutState(id)
+	if not state or not control or not control.instance then
+		return
+	end
+
+	if state.x ~= nil and state.y ~= nil then
+		safeSet(control.instance, "Position", UDim2.new(state.x, 0, state.y, 0))
+	end
+	if state.width ~= nil and state.height ~= nil then
+		safeSet(control.instance, "Size", UDim2.new(state.width, 0, state.height, 0))
+	end
+	if state.zIndex ~= nil then
+		self:setZIndex(id, state.zIndex)
+	end
+end
+
+function GUIController:_getTopLevelControlId(id)
+	local currentId = id
+	local guard = 0
+	while currentId and currentId ~= "" and guard < 128 do
+		local control = self.controls[currentId]
+		if not control then
+			return id
+		end
+		if control.parentId == nil or control.parentId == "" then
+			return currentId
+		end
+		currentId = control.parentId
+		guard += 1
+	end
+	return id
+end
+
+function GUIController:_getControlZIndex(control)
+	if not control then
+		return 1
+	end
+	if control.instance then
+		local ok, value = pcall(function()
+			return tonumber(control.instance.ZIndex) or 1
+		end)
+		if ok then
+			return value
+		end
+	end
+	return 1
+end
+
+function GUIController:_collectControlSubtree(rootId)
+	local ordered = {}
+	local function visit(id)
+		local control = self.controls[id]
+		if not control then
+			return
+		end
+		table.insert(ordered, id)
+		for childId, child in pairs(self.controls) do
+			if child.parentId == id then
+				visit(childId)
+			end
+		end
+	end
+	visit(rootId)
+	return ordered
+end
+
+function GUIController:bringToFront(id)
+	if id == nil or id == "" then
+		return false
+	end
+
+	local topLevelId = self:_getTopLevelControlId(id)
+	local topLevelControl = self.controls[topLevelId]
+	if not topLevelControl or not topLevelControl.instance then
+		return false
+	end
+
+	local currentBase = self:_getControlZIndex(topLevelControl)
+	local targetBase = self.nextTopLevelZIndex
+	self.nextTopLevelZIndex += 20
+	local delta = targetBase - currentBase
+
+	for _, controlId in ipairs(self:_collectControlSubtree(topLevelId)) do
+		local control = self.controls[controlId]
+		if control then
+			local currentZ = self:_getControlZIndex(control)
+			self:setZIndex(controlId, currentZ + delta)
+		end
+	end
+
+	return true
+end
+
 function GUIController:_registerControl(id, kind, instance, parentId)
 	local previous = self.controls[id]
 	if previous then
@@ -556,7 +691,22 @@ function GUIController:_registerControl(id, kind, instance, parentId)
 		suppressNextClick = previous and previous.suppressNextClick or false,
 	}
 
-	return self.controls[id]
+	local control = self.controls[id]
+	if instance and not self.headless then
+		self:_applyStoredLayoutState(id, control)
+
+		if parentId ~= nil and parentId ~= "" then
+			local parent = self.controls[parentId]
+			if parent then
+				local parentZ = self:_getControlZIndex(parent)
+				self:setZIndex(id, parentZ + 1)
+			end
+		else
+			self:bringToFront(id)
+		end
+	end
+
+	return control
 end
 
 function GUIController:_syncTextControl(control)
@@ -844,6 +994,7 @@ function GUIController:createRichTextArea(id, parentId, text, x, y, width, heigh
 	control.widthScale = width or 0.5
 	control.lineHeight = 18
 	control.text = tostring(text or "")
+	self:setZIndex(id, self:_getControlZIndex(control))
 	self:_syncTextControl(control)
 	return true
 end
@@ -923,8 +1074,11 @@ function GUIController:enableDrag(id, targetId)
 
 	local dragging = false
 	local dragInput = nil
+	local dragPointerType = nil
+	local dragReleaseConnection = nil
 	local dragStartPos = nil
-	local dragStartTargetAbsolute = nil
+	local dragStartScaleX = nil
+	local dragStartScaleY = nil
 	local moved = false
 
 	local function rootSize()
@@ -935,6 +1089,16 @@ function GUIController:enableDrag(id, targetId)
 			height = math.max(1, self.root.AbsoluteSize.Y)
 		end)
 		return width, height
+	end
+
+	local function targetAnchorPoint()
+		local anchorX = 0
+		local anchorY = 0
+		pcall(function()
+			anchorX = tonumber(targetInstance.AnchorPoint.X) or 0
+			anchorY = tonumber(targetInstance.AnchorPoint.Y) or 0
+		end)
+		return anchorX, anchorY
 	end
 
 	local function rootAbsolutePosition()
@@ -952,13 +1116,56 @@ function GUIController:enableDrag(id, targetId)
 		})
 	end
 
+	local function stopDrag()
+		if dragging ~= true then
+			return
+		end
+
+		dragging = false
+		if moved then
+			if control.kind == "button" then
+				control.suppressNextClick = true
+			end
+			local position = targetInstance.Position
+			self:_rememberPosition(target.id, position)
+			self:_pushEvent("dragend", id, { position.X.Scale, position.Y.Scale })
+		end
+
+		if dragReleaseConnection then
+			dragReleaseConnection:Disconnect()
+			dragReleaseConnection = nil
+		end
+
+		dragInput = nil
+		dragPointerType = nil
+		dragStartPos = nil
+		dragStartScaleX = nil
+		dragStartScaleY = nil
+		moved = false
+	end
+
 	attach(handle.InputBegan:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			self:bringToFront(target.id)
 			dragging = true
 			dragInput = input
+			dragPointerType = input.UserInputType
 			dragStartPos = asVector2(input.Position)
-			dragStartTargetAbsolute = asVector2(targetInstance.AbsolutePosition)
+			dragStartScaleX = tonumber(targetInstance.Position.X.Scale) or 0
+			dragStartScaleY = tonumber(targetInstance.Position.Y.Scale) or 0
 			moved = false
+
+			if dragReleaseConnection then
+				dragReleaseConnection:Disconnect()
+				dragReleaseConnection = nil
+			end
+			if input.Changed then
+				dragReleaseConnection = input.Changed:Connect(function()
+					if input.UserInputState == Enum.UserInputState.End then
+						stopDrag()
+					end
+				end)
+			end
 		end
 	end))
 
@@ -969,7 +1176,7 @@ function GUIController:enableDrag(id, targetId)
 	end))
 
 	attach(UserInputService.InputChanged:Connect(function(input)
-		if dragging and dragInput and input == dragInput and dragStartTargetAbsolute and dragStartPos then
+		if dragging and dragInput and input == dragInput and dragStartPos and dragStartScaleX ~= nil and dragStartScaleY ~= nil then
 			local currentPos = asVector2(input.Position)
 			local delta = currentPos - dragStartPos
 			if math.abs(delta.X) > 3 or math.abs(delta.Y) > 3 then
@@ -977,32 +1184,34 @@ function GUIController:enableDrag(id, targetId)
 			end
 
 			local rootWidth, rootHeight = rootSize()
-			local rootTopLeft = rootAbsolutePosition()
 			local frameWidth = math.max(1, targetInstance.AbsoluteSize.X)
 			local frameHeight = math.max(1, targetInstance.AbsoluteSize.Y)
-			local topLeft = dragStartTargetAbsolute + delta
-			local maxX = math.max(0, 1 - (frameWidth / rootWidth))
-			local maxY = math.max(0, 1 - (frameHeight / rootHeight))
-			local newX = math.max(0, math.min(maxX, (topLeft.X - rootTopLeft.X) / rootWidth))
-			local newY = math.max(0, math.min(maxY, (topLeft.Y - rootTopLeft.Y) / rootHeight))
+			local anchorX, anchorY = targetAnchorPoint()
+			local minX = anchorX * (frameWidth / rootWidth)
+			local maxX = 1 - ((1 - anchorX) * (frameWidth / rootWidth))
+			local minY = anchorY * (frameHeight / rootHeight)
+			local maxY = 1 - ((1 - anchorY) * (frameHeight / rootHeight))
+			local newX = math.max(minX, math.min(maxX, dragStartScaleX + (delta.X / rootWidth)))
+			local newY = math.max(minY, math.min(maxY, dragStartScaleY + (delta.Y / rootHeight)))
 			targetInstance.Position = UDim2.new(newX, 0, newY, 0)
+			self:_rememberPosition(target.id, targetInstance.Position)
 		end
 	end))
 
 	attach(UserInputService.InputEnded:Connect(function(input)
+		local releasedDragPointer = false
+		if dragging and dragPointerType == Enum.UserInputType.MouseButton1 and input.UserInputType == Enum.UserInputType.MouseButton1 then
+			releasedDragPointer = true
+		end
+		if dragging and dragPointerType == Enum.UserInputType.Touch and input.UserInputType == Enum.UserInputType.Touch then
+			releasedDragPointer = true
+		end
 		if dragging and dragInput and input == dragInput then
-			dragging = false
-			if moved then
-				if control.kind == "button" then
-					control.suppressNextClick = true
-				end
-				local position = targetInstance.Position
-				self:_pushEvent("dragend", id, { position.X.Scale, position.Y.Scale })
-			end
-			dragInput = nil
-			dragStartPos = nil
-			dragStartTargetAbsolute = nil
-			moved = false
+			releasedDragPointer = true
+		end
+
+		if releasedDragPointer then
+			stopDrag()
 		end
 	end))
 
@@ -1174,6 +1383,7 @@ function GUIController:createTextArea(id, parentId, text, x, y, width, height)
 	control.widthScale = width or 0.5
 	control.lineHeight = 18
 	control.text = tostring(text or "")
+	self:setZIndex(id, self:_getControlZIndex(control))
 	self:_syncTextControl(control)
 	return true
 end
@@ -1223,6 +1433,7 @@ function GUIController:setSize(id, width, height)
 	local instance = self:_resolveControlInstance(id)
 	if instance then
 		safeSet(instance, "Size", UDim2.new(tonumber(width) or 0, 0, tonumber(height) or 0, 0))
+		self:_rememberSize(id, instance.Size)
 	end
 	return true
 end
@@ -1231,6 +1442,7 @@ function GUIController:setPosition(id, x, y)
 	local instance = self:_resolveControlInstance(id)
 	if instance then
 		safeSet(instance, "Position", UDim2.new(tonumber(x) or 0, 0, tonumber(y) or 0, 0))
+		self:_rememberPosition(id, instance.Position)
 	end
 	return true
 end
@@ -1249,6 +1461,7 @@ function GUIController:setParent(id, parentId)
 	if control.instance then
 		control.instance.Parent = self:_resolveParent(parentId)
 	end
+	self:bringToFront(id)
 	return true
 end
 
@@ -1270,6 +1483,7 @@ function GUIController:setZIndex(id, zIndex)
 	if control and control.button then
 		safeSet(control.button, "ZIndex", value)
 	end
+	self:_rememberZIndex(id, value)
 	return true
 end
 
