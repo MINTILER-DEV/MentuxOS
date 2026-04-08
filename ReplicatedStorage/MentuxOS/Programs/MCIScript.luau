@@ -6,7 +6,7 @@ let line = "";
 guiAppend(outputId, "Mentux Command Interpreter ready");
 guiAppend(outputId, concat("PWD=", envGet("PWD")));
 guiAppend(outputId, "Builtins: help, ls, cd, pwd, touch, write, append, cat, rm, mkdir, mv, ps, kill, which, motd, clear, exit");
-guiAppend(outputId, "Apps: curl, ping, hello, notepad, code, browser, mtsum, settings, mtxdthost");
+guiAppend(outputId, "Apps: curl, ping, hello, notepad, code, browser, mtsum, settings, tux");
 guiAppend(outputId, "Redirection: <builtin> ... >> <path>");
 guiSetText(lineId, concat(concat(envGet("PWD"), " $ "), line));
 
@@ -98,11 +98,11 @@ while true {
 								handled = true;
 								if redirectActive == true {
 									appendFile(redirectPath, "Builtins: help, ls, cd, pwd, touch, write, append, cat, rm, mkdir, mv, ps, kill, which, motd, clear, exit\n");
-									appendFile(redirectPath, "Apps: curl, ping, hello, notepad, code, browser, mtsum, settings, mtxdthost\n");
+									appendFile(redirectPath, "Apps: curl, ping, hello, notepad, code, browser, mtsum, settings, tux\n");
 									appendFile(redirectPath, "Redirection: <builtin> ... >> <path>\n");
 								} else {
 									guiAppend(outputId, "Builtins: help, ls, cd, pwd, touch, write, append, cat, rm, mkdir, mv, ps, kill, which, motd, clear, exit");
-									guiAppend(outputId, "Apps: curl, ping, hello, notepad, code, browser, mtsum, settings, mtxdthost");
+									guiAppend(outputId, "Apps: curl, ping, hello, notepad, code, browser, mtsum, settings, tux");
 									guiAppend(outputId, "Redirection: <builtin> ... >> <path>");
 								}
 							}

@@ -50,7 +50,12 @@ if exists("/user/tester/desktop/settings.sym") == false {
 }
 
 let appArgs = listNew();
-exec("mtxdthost", appArgs);
+let webArgs = listNew();
+push(webArgs, "/www/website.tux");
+push(webArgs, 80);
+push(webArgs, "website.tux");
+push(webArgs, "10.0.0.5");
+exec("tux", webArgs);
 exec("gui", appArgs);
 exit(0);
 ]]

@@ -27,6 +27,7 @@ local MTSharpPrograms = require(script.Parent.Programs:WaitForChild("MTSharp"))
 local UIMotionLibrary = require(script.Parent.Libraries:WaitForChild("UIMotionLibrary"))
 local MCIScript = require(script.Parent.Programs:WaitForChild("MCIScript"))
 local TerminalScript = require(script.Parent.Programs:WaitForChild("TerminalScript"))
+local TuxScript = require(script.Parent.Programs:WaitForChild("TuxScript"))
 
 local ExamplePrograms = {}
 local MentuxSharpCompiler = MentuxSharp.Compiler
@@ -227,6 +228,18 @@ function ExamplePrograms.buildTerminalImage()
 	})
 end
 
+function ExamplePrograms.buildTuxImage()
+	return MentuxScriptCompiler.compile(TuxScript, {
+		name = "mentux-tux",
+		stackSize = 384,
+		metadata = {
+			displayName = "tux",
+			summary = "Pure Mentux MtxDT host command for localhost and virtual sites.",
+			category = "network",
+		},
+	})
+end
+
 function ExamplePrograms.buildSettingsLauncherImage()
 	return MentuxScriptCompiler.compile(SettingsLauncherScript, {
 		name = "mentux-settings-launcher",
@@ -309,6 +322,10 @@ function ExamplePrograms.createSystemDisk()
 						kind = "file",
 						content = ExamplePrograms.buildPingImage(),
 					},
+					["tux.mtx"] = {
+						kind = "file",
+						content = ExamplePrograms.buildTuxImage(),
+					},
 				},
 			},
 			apps = {
@@ -361,7 +378,7 @@ function ExamplePrograms.createSystemDisk()
 							},
 							["site.json"] = {
 								kind = "file",
-								content = '{"host":"website.tux","ip":"10.0.0.5","port":80,"entry":"site.mxl"}',
+								content = '{"host":"website.tux","ip":"10.0.0.5","port":80,"routes":[{"path":"/","kind":"dynamic","handlerPath":"site.mxl","handlerExport":"WebsiteTuxSite.Home"},{"path":"/about","kind":"dynamic","handlerPath":"site.mxl","handlerExport":"WebsiteTuxSite.About"},{"path":"/counter","kind":"dynamic","handlerPath":"site.mxl","handlerExport":"WebsiteTuxSite.Counter"},{"path":"/live","kind":"dynamic","handlerPath":"site.mxl","handlerExport":"WebsiteTuxSite.Live"}]}',
 							},
 						},
 					},
@@ -457,7 +474,7 @@ function ExamplePrograms.createSystemDisk()
 				children = {
 					["motd.txt"] = {
 						kind = "file",
-						content = "Welcome to Mentux OS. This guest kernel is running on a custom VM, not Luau bytecode.\nTry the Browser app with mtx://website.tux/.",
+						content = "Welcome to Mentux OS. This guest kernel is running on a custom VM, not Luau bytecode.\nTry the Browser app with mtx://website.tux/.\nYou can host a site with: tux /www/website.tux 3000 localhost",
 					},
 				},
 			},

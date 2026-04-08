@@ -1,0 +1,334 @@
+return [[
+let outputId = envGet("TERM_OUTPUT");
+let webLib = "/lib/web/mtxdt.mxl";
+let jsonLib = "/lib/core/json.mxl";
+
+let rootPath = envGet("PWD");
+let port = 8080;
+let host = "localhost";
+let ip = "127.0.0.1";
+let overrideRoot = false;
+let overridePort = false;
+let overrideHost = false;
+let overrideIp = false;
+
+if argc() >= 1 {
+	let arg1 = argv(1);
+	let arg1Path = resolvePath(arg1);
+	let arg1Kind = statKind(arg1Path);
+	let arg1Port = toNumber(arg1);
+
+	if arg1Kind == "dir" {
+		rootPath = arg1Path;
+		overrideRoot = true;
+
+		if argc() >= 2 {
+			let arg2Port = toNumber(argv(2));
+			if arg2Port > 0 {
+				port = arg2Port;
+				overridePort = true;
+			}
+		}
+
+		if argc() >= 3 {
+			host = argv(3);
+			overrideHost = true;
+		}
+
+		if argc() >= 4 {
+			ip = argv(4);
+			overrideIp = true;
+		}
+	} else {
+		if arg1Port > 0 {
+			port = arg1Port;
+			overridePort = true;
+
+			if argc() >= 2 {
+				let arg2Path = resolvePath(argv(2));
+				if statKind(arg2Path) == "dir" {
+					rootPath = arg2Path;
+					overrideRoot = true;
+				}
+			}
+
+			if argc() >= 3 {
+				host = argv(3);
+				overrideHost = true;
+			}
+
+			if argc() >= 4 {
+				ip = argv(4);
+				overrideIp = true;
+			}
+		} else {
+			guiAppend(outputId, "usage: tux [root] [port] [host] [ip]");
+			guiAppend(outputId, "usage: tux [port] [root] [host] [ip]");
+			guiAppend(outputId, "example: tux /www/website.tux 3000 localhost");
+			exit(1);
+		}
+	}
+}
+
+if statKind(rootPath) != "dir" {
+	guiAppend(outputId, concat("site root not found: ", rootPath));
+	exit(1);
+}
+
+let manifest = false;
+let manifestRoutes = listNew();
+let manifestPath = resolvePath(concat(rootPath, "/site.json"));
+if statKind(manifestPath) == "file" {
+	let parseArgs = listNew();
+	push(parseArgs, readFile(manifestPath));
+	manifest = libCall(jsonLib, "parse", parseArgs);
+}
+
+if manifest != false {
+	if overrideHost == false {
+		let manifestHost = objGet(manifest, "host");
+		if len(manifestHost) > 0 {
+			host = manifestHost;
+		}
+	}
+
+	if overridePort == false {
+		let manifestPort = toNumber(objGet(manifest, "port"));
+		if manifestPort > 0 {
+			port = manifestPort;
+		}
+	}
+
+	if overrideIp == false {
+		let manifestIp = objGet(manifest, "ip");
+		if len(manifestIp) > 0 {
+			ip = manifestIp;
+		}
+	}
+
+	let routesValue = objGet(manifest, "routes");
+	if len(routesValue) > 0 {
+		manifestRoutes = routesValue;
+	}
+}
+
+if overrideIp == false {
+	if host == "localhost" {
+		ip = "127.0.0.1";
+	} else {
+		let ipLast = port;
+		while ipLast > 240 {
+			ipLast = ipLast - 200;
+		}
+		if ipLast < 2 {
+			ipLast = ipLast + 20;
+		}
+		ip = concat("10.0.0.", ipLast);
+	}
+}
+
+let listenArgs = listNew();
+push(listenArgs, host);
+push(listenArgs, ip);
+push(listenArgs, port);
+push(listenArgs, rootPath);
+let site = libCall(webLib, "Server.Listen", listenArgs);
+let routeCount = 0;
+
+if len(manifestRoutes) > 0 {
+	let routeIndex = 1;
+	while routeIndex <= len(manifestRoutes) {
+		let routeDef = get(manifestRoutes, routeIndex);
+		let routePath = objGet(routeDef, "path");
+		let routeKind = objGet(routeDef, "kind");
+		if len(routePath) == 0 {
+			routePath = "/";
+		}
+
+		if routeKind == "dynamic" {
+			let handlerPath = objGet(routeDef, "handlerPath");
+			if len(handlerPath) == 0 {
+				handlerPath = objGet(routeDef, "file");
+			}
+			let handlerExport = objGet(routeDef, "handlerExport");
+			if len(handlerPath) > 0 and len(handlerExport) > 0 {
+				if charAt(handlerPath, 1) != "/" {
+					handlerPath = resolvePath(concat(concat(rootPath, "/"), handlerPath));
+				}
+				let routeArgs = listNew();
+				push(routeArgs, site);
+				push(routeArgs, routePath);
+				push(routeArgs, handlerPath);
+				push(routeArgs, handlerExport);
+				libCall(webLib, "Server.RouteDynamic", routeArgs);
+				routeCount = routeCount + 1;
+			}
+		} else {
+			let filePath = objGet(routeDef, "file");
+			if len(filePath) > 0 {
+				if charAt(filePath, 1) != "/" {
+					filePath = resolvePath(concat(concat(rootPath, "/"), filePath));
+				}
+
+				if statKind(filePath) == "file" {
+					let rawContent = readFile(filePath);
+					let parseArgs = listNew();
+					push(parseArgs, rawContent);
+					let response = libCall(jsonLib, "parse", parseArgs);
+
+					if response == false {
+						let pageArgs = listNew();
+						let page = libCall(webLib, "Webpage.New", pageArgs);
+						let titleText = host;
+						if routePath != "/" {
+							titleText = routePath;
+						}
+
+						let titleArgs = listNew();
+						push(titleArgs, page);
+						push(titleArgs, titleText);
+						libCall(webLib, "Webpage.SetTitle", titleArgs);
+
+						let textArgs = listNew();
+						push(textArgs, page);
+						push(textArgs, rawContent);
+						libCall(webLib, "Webpage.AddText", textArgs);
+
+						let responseArgs = listNew();
+						push(responseArgs, page);
+						response = libCall(webLib, "Response.Ok", responseArgs);
+					}
+
+					let routeArgs = listNew();
+					push(routeArgs, site);
+					push(routeArgs, routePath);
+					push(routeArgs, response);
+					libCall(webLib, "Server.RouteStatic", routeArgs);
+					routeCount = routeCount + 1;
+				}
+			}
+		}
+
+		routeIndex = routeIndex + 1;
+	}
+} else {
+	let entries = listDir(rootPath);
+	let entryIndex = 1;
+	while entryIndex <= len(entries) {
+		let entryName = get(entries, entryIndex);
+		let entryPath = resolvePath(concat(concat(rootPath, "/"), entryName));
+		if statKind(entryPath) == "file" {
+			let baseName = "";
+			let routePath = "";
+			let useEntry = false;
+			let entryLength = len(entryName);
+
+			if entryName != "site.json" {
+				if entryLength > 10 {
+					if substr(entryName, entryLength - 10 + 1, 10) == ".page.json" {
+						baseName = substr(entryName, 1, entryLength - 10);
+						useEntry = true;
+					}
+				}
+
+				if useEntry == false {
+					if entryLength > 4 {
+						if substr(entryName, entryLength - 4 + 1, 4) == ".txt" {
+							baseName = substr(entryName, 1, entryLength - 4);
+							useEntry = true;
+						}
+					}
+				}
+			}
+
+			if useEntry == true {
+				if baseName == "index" {
+					routePath = "/";
+				} else {
+					routePath = concat("/", baseName);
+				}
+
+				let rawContent = readFile(entryPath);
+				let parseArgs = listNew();
+				push(parseArgs, rawContent);
+				let response = libCall(jsonLib, "parse", parseArgs);
+
+				if response == false {
+					let pageArgs = listNew();
+					let page = libCall(webLib, "Webpage.New", pageArgs);
+					let titleText = host;
+					if routePath != "/" {
+						titleText = baseName;
+					}
+
+					let titleArgs = listNew();
+					push(titleArgs, page);
+					push(titleArgs, titleText);
+					libCall(webLib, "Webpage.SetTitle", titleArgs);
+
+					let textArgs = listNew();
+					push(textArgs, page);
+					push(textArgs, rawContent);
+					libCall(webLib, "Webpage.AddText", textArgs);
+
+					let responseArgs = listNew();
+					push(responseArgs, page);
+					response = libCall(webLib, "Response.Ok", responseArgs);
+				}
+
+				let routeArgs = listNew();
+				push(routeArgs, site);
+				push(routeArgs, routePath);
+				push(routeArgs, response);
+				libCall(webLib, "Server.RouteStatic", routeArgs);
+				routeCount = routeCount + 1;
+			}
+		}
+
+		entryIndex = entryIndex + 1;
+	}
+}
+
+if routeCount == 0 {
+	let pageArgs = listNew();
+	let page = libCall(webLib, "Webpage.New", pageArgs);
+
+	let titleArgs = listNew();
+	push(titleArgs, page);
+	push(titleArgs, host);
+	libCall(webLib, "Webpage.SetTitle", titleArgs);
+
+	let textArgs = listNew();
+	push(textArgs, page);
+	push(textArgs, concat("tux is serving ", rootPath));
+	libCall(webLib, "Webpage.AddText", textArgs);
+
+	let textArgs2 = listNew();
+	push(textArgs2, page);
+	push(textArgs2, "No routes were discovered, so this default page was generated.");
+	libCall(webLib, "Webpage.AddText", textArgs2);
+
+	let responseArgs = listNew();
+	push(responseArgs, page);
+	let response = libCall(webLib, "Response.Ok", responseArgs);
+
+	let routeArgs = listNew();
+	push(routeArgs, site);
+	push(routeArgs, "/");
+	push(routeArgs, response);
+	libCall(webLib, "Server.RouteStatic", routeArgs);
+	routeCount = 1;
+}
+
+let registerArgs = listNew();
+push(registerArgs, site);
+let registerResult = libCall(webLib, "Server.Register", registerArgs);
+
+guiAppend(outputId, concat("Hosted ", rootPath));
+guiAppend(outputId, concat("URL: ", concat(concat("mtx://", host), concat(":", concat(port, "/")))));
+guiAppend(outputId, concat("IP: ", ip));
+guiAppend(outputId, concat("Routes: ", routeCount));
+guiAppend(outputId, concat("Registry: ", objGet(registerResult, "host")));
+
+exit(0);
+]]

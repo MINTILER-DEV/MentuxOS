@@ -19,17 +19,29 @@ local guiController = GUIController.new({
 	},
 })
 
-local ok, result = pcall(function()
-	return Main.boot({
+local detailederrors = false
+
+if detailederrors then
+	local out = Main.boot({
 		logger = log,
 		trace = false,
 		memorySize = 8192,
 		guiController = guiController,
 	})
-end)
+	print(out)
+else
+	local ok, result = pcall(function()
+		return Main.boot({
+			logger = log,
+			trace = false,
+			memorySize = 8192,
+			guiController = guiController,
+		})
+	end)
 
-if not ok then
-	warn("[MentuxOS] Boot failed: " .. tostring(result))
-elseif not result.result.ok then
-	warn("[MentuxOS] Kernel crashed: " .. tostring(result.result.error))
+	if not ok then
+		warn("[MentuxOS] Boot failed: " .. tostring(result))
+	elseif not result.result.ok then
+		warn("[MentuxOS] Kernel crashed: " .. tostring(result.result.error))
+	end
 end
